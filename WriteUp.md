@@ -475,7 +475,7 @@ Trong trường hợp này, hàm này sẽ trả về giá trị trở về củ
    0x0000000000400699 <+130>:	leave  
    0x000000000040069a <+131>:	ret    
 ```
-Dựa vào code ASM thì chúng ta thấy buffer ở vị trí [rbp-0x50] có nghĩa là chúng ta sẽ dùng 0x50 bytes để đè lên buffer , sau đó là 0x8 bytes để đè lên old rbp và sau đó sẽ là giá trị mà chúng ta nhảy về là ret.
+Dựa vào code ASM thì chúng ta thấy buffer ở vị trí [rbp-0x50] có nghĩa là chúng ta sẽ dùng 0x50 bytes để đè lên buffer và ret , sau đó là 0x8 bytes để đè lên old rbp và sau đó sẽ là giá trị mà chúng ta nhảy về là ret.
 
 Mình viết một payload như sau:
 ```
