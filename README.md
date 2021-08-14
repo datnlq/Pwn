@@ -1118,4 +1118,3 @@ io.interactive()
 ```
 
 Và chúng ta đã có thể có flag
-
