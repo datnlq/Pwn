@@ -12,7 +12,8 @@
     RUNPATH:  b'./'
 
 ```
-We are given an a ELF binary file, its loader and libc version. We are also provided source code C :
+Đề bài cung cấp cho chúng ta 1 file binary ELF và libc version của chương trình.
+Sau khi kiểm tra các thuộc tính của file ELF chúng ta có thể đọc source code được kèm theo để xác định flow của chương trình.
 ```
 #include <stdio.h>
 
@@ -82,20 +83,12 @@ int main() {
 
 ```
 
-Read source code and we can understand flow of this.
-Since binary file has no win funtion and we provided libc file so we have to used ret2libc attack.
+Sau khi đọc xong source code thì chúng ta xác định được rằng không có flag cũng như hàm gọi flag trong chương trình, điều đó có nghĩa là chúng ta phải gọi shell bằng phương pháp ret2libc. 
 
-First thing, we have to find the RIP offset from the start of the input buffer, we can basically crash the programm with a long enough input inside gdb and check the offset. 
-It is 264. (256 + 8)
+Vì chúng ta được có được libc version, nên chúng ta có thể xác định được offset của hàm system,puts, cũng như chuỗi *"/bin/sh"* để viết ROP. Từ libc chúng ta cũng xác định được hàm các hàm cần thiết như *got.puts , plt.puts , main*.
 
-Next we have to leak a libc address to defeat the ASLR, we can jump to printf@plt and pass as parameter the address of printf@got. 
-Once we leaked the address we can calculate the libc base address.
 
-After the leak we have to perform another buffer overflow, so let's jump to main and craft another ROP-chain. 
-Now we just need to jump to system and pass the address of */bin/sh* as parameter to the function. We can find system funtion offset in libc file.
 
-Sometimes the rop-chain won't work because printf and system function crash. That happens because the stack is not aligned to 16 byte, to fix this issue we can put a ret gadget as the first gadget, 
-so it will pop 8 bytes from the stack and fix the alignment.
 
 ```
 from pwn import * 
