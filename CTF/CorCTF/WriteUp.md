@@ -341,7 +341,7 @@ int main(){
 	return 0;
 }
 ```
-#### Flow
+#### Struc heap
 
 The binary allocates 2 chunks on the heap of the same sizes.
 
@@ -376,7 +376,9 @@ There is an allocation of the user object that is of the type struct_user and th
  ```
  
 user = malloc(sizeof(struct users)*4)
+
 root = user + 1
+
 There follows a couple of str copies. They copy strings into the and buffers.user -> nameroot -> name
 
 The setup() function is called that allows us to do the following:
