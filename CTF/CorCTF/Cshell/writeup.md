@@ -202,16 +202,12 @@ int main(){
 ```
 #### Struc heap
 
-The binary allocates 2 chunks on the heap of the same sizes.
-
+Dựa vào code C ở source code trên, chúng ta có thể thấy 2 biến dưới đây được cấp phát đầu tiên trong heap:
 root_t: 0x20 (0x30) --> FastBinChunk.
 user_t: 0x20 (0x30) --> FastBinChunk.
-There are 2 objects that are free() from the heap and they are of the following sizes:
 
-Eric_buff : 0x80 (0x90) --> This is a smallbin chunk.
-Charlie_buff : 0x50 (0x60) --> This is a fastbin chunk.
-Both of these chunks fill up the tcache but in different indexes. Since they are of different sizes.
-There is an allocation of the user object that is of the type struct_user and then the root allocation of the type struct_user. They are allocated in the following way.
+Tiếp theo sẽ là các biến alex_buff, charlie_buff, ... sau đó mới đến vùng nhớ của user được nhập vào
+Điều đó làm chúng ta có thể vẽ 1 bảng heap như sau:
 
 ```
 +-------------------------------+
@@ -238,18 +234,20 @@ user = malloc(sizeof(struct users)*4)
 
 root = user + 1
 
-There follows a couple of str copies. They copy strings into the and buffers.user -> nameroot -> name
+Trong hàm đã gọi hàm free() đây chính là điểm mấu chốt giúp chúng ta khai thác được bài này dùng kỹ thuật *using after free* để xin cấp phát đúng vào bộ nhớ ở Tcache mới được free.
 
-The setup() function is called that allows us to do the following:
+Sau đó lợi dụng lỗi bufferoverflow để ghi đè lên phần password của root ở phía dưới để có thể đăng nhập vào root.
 
-Enter the username and password.
-Specify our own size to and input into this buffer is limited to 201 bytes. Therefore this can be a possible heap overflow when we allocate a chunk of size < 200 bytes 😄malloc()
-The logout function looks intresting since it does the following.
+----- Heap overflow :<
 
-It gets the name of the user
-There is a loop that checks for the username and checks if the user exists if not, the program exists; if True the programs asks for the password and updates uid
-Using the user and password will never work since when we enter a password it is hashed first then checks against the password that is stored in . Therefore our hashed will be strcompared against the unhashed and this will never be true.rootguessme=)ptr -> ptr -> passwordguessme=)guessme=)
+Xác định địa chỉ đã được free ở Tcache : 
+```
+Eric_buff : 0x80 (0x90) 
+Charlie_buff : 0x50 (0x60) 
+```
+Như chúng ta thấy thì địa chỉ trước của Eric_buff sẽ gần với root hơn nên chúng ta sẽ xin cấp phát vào chỗ này.
 
+Sau đó check string pass được tạo ra bằng hàm crypt() của user mình mới nhập vào. Tính toán offset và đưa chuỗi crypt() của pass đè lên pass của root, lúc đó pass user = pass root.
 
 #### Exploit:
 
