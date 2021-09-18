@@ -11,7 +11,7 @@ def exploit():
 		values = values.strip().split(" ")
 		print(values)
 		for v in values:
-			io.recvuntil("check?")
+			io.recvuntil("Which haystack do you want to check?")
 			io.sendline(v)
 			io.recvuntil("Hey")
 			answer = "Hey" + io.recvline().decode()
