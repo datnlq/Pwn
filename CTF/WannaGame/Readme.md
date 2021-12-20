@@ -97,6 +97,8 @@ Sử dụng các câu lệnh cơ bản để kiểm tra file và dùng IDA Pro �
 
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_checkfile.png?raw=true)
 
+Dựa vào file 64 binary để sử dụng IDA Pro 64 để dịch ngược lại:
+
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_IDAmain.png?raw=true)
 
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_IDAvuln.png?raw=true)
@@ -106,8 +108,11 @@ Sau đó chúng ta chạy thử chương trình và gdb để phân tích rõ fl
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_test.png?raw=true)
 
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_debug_findbuffaddress.png?raw=true)
+Như chúng ta thấy thì không hề thấy input đã được ghi vào stack làm mình hơi hoang mang
 
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_debug_stack.png?raw=true)
+
+Tuy nhiên vì mình để ý thấy có hàm cấp phát malloc nên mình đã tìm lại 1 chút và phát hiện ra rằng input đã được ghi vào 1 giá trị trong stack
 
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_buffad.png?raw=true)
 
