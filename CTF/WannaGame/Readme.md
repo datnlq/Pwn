@@ -108,6 +108,7 @@ Sau đó chúng ta chạy thử chương trình và gdb để phân tích rõ fl
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_test.png?raw=true)
 
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_debug_findbuffaddress.png?raw=true)
+
 Như chúng ta thấy thì không hề thấy input đã được ghi vào stack làm mình hơi hoang mang
 
 ![img](https://github.com/datnlq/Source/blob/main/CTF/img/letwarnup_debug_stack.png?raw=true)
